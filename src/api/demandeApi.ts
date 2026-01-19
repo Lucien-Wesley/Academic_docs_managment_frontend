@@ -25,4 +25,9 @@ export const demandeApi = {
     const response = await api.delete(`/demandes/${id}`);
     return response.data;
   },
+
+  uploadEvidence: async (demandeId: number, formData: FormData ) => {
+    const response = await api.post(`/demandes/${demandeId}/evidences`, formData)
+    return response.data
+  }
 };
