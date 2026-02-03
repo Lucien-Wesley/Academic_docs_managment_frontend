@@ -50,7 +50,8 @@ const AdminDashboard: React.FC = () => {
       'libraire': 'Librairie',
       'bibliothecaire': 'Bibliothécaire',
       'comptable': 'Comptable',
-      'archives': 'Archives'
+      'archives': 'Archives',
+      'academique': 'Secretariat General Académique'
     };
     return titles[role || ''] || role;
   };

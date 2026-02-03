@@ -26,8 +26,17 @@ export const demandeApi = {
     return response.data;
   },
 
+  submit: async (id: number) => {
+    const response = await api.post(`/demandes/${id}/submit`);
+    return response.data;
+  },
+
   uploadEvidence: async (demandeId: number, formData: FormData ) => {
-    const response = await api.post(`/demandes/${demandeId}/evidences`, formData)
+    const response = await api.post(`/evidences/${demandeId}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
     return response.data
   }
 };

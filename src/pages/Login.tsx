@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FileText, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Mail, Lock, AlertCircle } from 'lucide-react';
 
 const Login: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -23,7 +23,7 @@ const Login: React.FC = () => {
       await login(formData.email, formData.password);
       //console.log('Utilisateur connecté:', user);
       // Redirect admin users to admin dashboard
-      if (user && ['secretaire', 'doyen', 'libraire', 'bibliothecaire', 'comptable'].includes(user.role)) {
+      if (user && ['secretaire', 'doyen', 'libraire', 'bibliothecaire', 'comptable', 'academique'].includes(user.role)) {
         console.log('must navigate to admin');
         navigate('/admin');
       }

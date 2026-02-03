@@ -18,7 +18,7 @@ const AppRoutes = () => {
     if (!user) return '/login';
     
     // Redirect admin users to admin dashboard
-    if (['secretaire', 'doyen', 'libraire', 'bibliothecaire', 'comptable'].includes(user.role)) {
+    if (['secretaire', 'doyen', 'libraire', 'bibliothecaire', 'comptable', 'academique'].includes(user.role)) {
       return '/admin';
     }
     
@@ -53,7 +53,7 @@ const AppRoutes = () => {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute allowedRoles={['secretaire', 'doyen', 'libraire', 'bibliothecaire', 'comptable']}>
+          <ProtectedRoute allowedRoles={['secretaire', 'doyen', 'libraire', 'bibliothecaire', 'comptable', 'academique']}>
             <AdminDashboard />
           </ProtectedRoute>
         }

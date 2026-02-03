@@ -28,7 +28,7 @@ interface DemandCardProps {
 const DemandCard: React.FC<DemandCardProps> = ({ demande, isAdmin = false }) => {
   const handleDownload = async () => {
     try {
-      const blob = await documentApi.downloadPdf(demande.id);
+      const blob = await documentApi.downloadFiche(demande.id);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';

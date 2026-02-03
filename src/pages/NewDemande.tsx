@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, AlertCircle } from 'lucide-react';
+import { ArrowLeft, FileText, AlertCircle, Upload, CheckCircle } from 'lucide-react';
 import { demandeApi } from '../api/demandeApi';
 import Navbar from '../components/Navbar';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { DocumentType, DocumentTypeLabels } from '../types/documentTypes';
+
 type EvidenceInput = {
   file: File;
   type: string;
 };
 
 const NewDemande: React.FC = () => {
-
+  // --- ÉTATS ---
+  const [step, setStep] = useState(1); // Étape 1: Formulaire, Étape 2: Preuves
+  const [demandeId, setDemandeId] = useState<number | null>(null);
   const [evidences, setEvidences] = useState<EvidenceInput[]>([]);
   const [formData, setFormData] = useState({
     document_type: [] as string[],
@@ -19,85 +23,103 @@ const NewDemande: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const [files, setFiles] = useState<File[]>([]);
-  const [demandeId, setDemandeId] = useState<number | null>(null);
-
   const [openCategory, setOpenCategory] = useState<string | null>(null);
-
 
   const navigate = useNavigate();
 
-
-  const documentCategories: Record<string, string[]> = {
+  // --- DONNÉES ---
+  const documentCategories: Record<string, DocumentType[]> = {
     'Relevés de notes': [
-      'Relevé de notes L0',
-      'Relevé de notes L1',
-      'Relevé de notes L2',
-      'Relevé de notes L3',
-      'Relevé de notes M1',
-      'Relevé de notes M2',
+      DocumentType.RELEVE_NOTES_L0,
+      DocumentType.RELEVE_NOTES_L1,
+      DocumentType.RELEVE_NOTES_L2,
+      DocumentType.RELEVE_NOTES_L3,
+      DocumentType.RELEVE_NOTES_M1,
+      DocumentType.RELEVE_NOTES_M2,
     ],
     'Attestations': [
-      'Attestation de réussite L0',
-      'Attestation de réussite L1',
-      'Attestation de réussite L2',
-      'Attestation de réussite L3',
-      'Attestation de réussite M1',
-      'Attestation de réussite M2',
-      'Attestation de Fréquentation',
+      DocumentType.ATTESTATION_REUSSITE_L0,
+      DocumentType.ATTESTATION_REUSSITE_L1,
+      DocumentType.ATTESTATION_REUSSITE_L2,
+      DocumentType.ATTESTATION_REUSSITE_L3,
+      DocumentType.ATTESTATION_REUSSITE_M1,
+      DocumentType.ATTESTATION_REUSSITE_M2,
+      DocumentType.ATTESTATION_FREQUENTATION,
     ],
     'Diplômes': [
-      'Diplôme de Licence',
-      'Diplôme de Master',
+      DocumentType.DIPLOME_LICENCE,
+      DocumentType.DIPLOME_MASTER,
     ],
   };
 
   const evidenceTypes = [
-    'Reçu de paiement',
-    'Attestation d’ordre avec la faculté',
+    'Reçu de paiement', 
+    'Attestation d’ordre avec la faculté', 
     'Décision administrative',
-    'Autre',
+    'Autre'
   ];
 
-
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  // --- LOGIQUE STEP 1: CRÉATION ---
+  const handleStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (formData.document_type.length === 0) {
+      setError('Sélectionnez au moins un type de document');
+      return;
+    }
+
     setLoading(true);
     try {
-      if (formData.document_type.length === 0) {
-        setError('Sélectionnez au moins un type de document');
-        return;
-      }
-
-      // 1️⃣ Création de la demande (JSON)
+      // On crée la demande (elle passe en mode "Brouillon" côté API normalement)
       const res = await demandeApi.create(formData);
-      const demandeId = res.data.id;
-
-      // 2️⃣ Upload des evidences (si présentes)
-      if (files.length > 0) {
-        await uploadEvidences(demandeId);
-      }
-
-      // 3️⃣ Soumission finale
-      await demandeApi.submit(demandeId);
-
-      navigate('/dashboard');
+      setDemandeId(res.id);
+      setStep(2); // On passe à l'étape des preuves
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Erreur lors de la soumission');
+      setError(err.response?.data?.message || "Erreur lors de la création de la demande");
     } finally {
       setLoading(false);
     }
   };
 
+  // --- LOGIQUE STEP 2: PREUVES ET FIN ---
+  const handleStep2Submit = async () => {
+    if (!demandeId) return;
+    setError('');
+    setLoading(true);
+    try {
+      // 1. Upload des preuves s'il y en a
+      if (evidences.length > 0) {
+        for (const ev of evidences) {
+          if (!ev.type) {
+            setError(`Veuillez sélectionner un type pour le fichier ${ev.file.name}`);
+            setLoading(false);
+            return;
+          }
+        }
+        await uploadEvidences(demandeId);
+      }
+      // 2. Soumission finale (Change le statut de brouillon à soumis)
+      await demandeApi.submit(demandeId);
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError("Erreur lors de l'envoi des preuves ou de la soumission");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const uploadEvidences = async (id: number) => {
+    for (const ev of evidences) {
+      const data = new FormData();
+      data.append('file', ev.file);
+      data.append('description', ev.type);
+      await demandeApi.uploadEvidence(id, data);
+    }
+  };
+
+  // --- HANDLERS DIVERS ---
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const toggleDocumentType = (type: string) => {
@@ -109,279 +131,149 @@ const NewDemande: React.FC = () => {
     }));
   };
 
-  const toggleCategory = (category: string) => {
-    setOpenCategory(prev =>
-      prev === category ? null : category
-    );
-  };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-
     const newEvidences: EvidenceInput[] = Array.from(e.target.files).map(file => ({
       file,
       type: '',
     }));
-
     setEvidences(prev => [...prev, ...newEvidences]);
   };
-
-  const updateEvidenceType = (index: number, type: string) => {
-  setEvidences(prev =>
-    prev.map((ev, i) =>
-      i === index ? { ...ev, type } : ev
-    )
-  );
-};
-
-  const removeEvidence = (index: number) => {
-    setEvidences(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const uploadEvidences = async (demandeId: number) => {
-    for (const ev of evidences) {
-      const formData = new FormData();
-      formData.append('file', ev.file);
-      formData.append('evidence_type', ev.type);
-
-      await demandeApi.uploadEvidence(demandeId, formData);
-    }
-  };
-
-
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      
       <div className="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Header */}
-          <div className="flex items-center mb-8">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md"
-            >
+        {/* Header avec indicateur d'étapes */}
+        <div className="flex items-center justify-between mb-8 px-4">
+          <div className="flex items-center">
+            <button onClick={() => navigate('/dashboard')} className="mr-4 p-2 text-gray-600 hover:bg-gray-100 rounded-md">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Nouvelle demande</h1>
-              <p className="mt-1 text-gray-600">
-                Créez une nouvelle demande de document académique
-              </p>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-900">Nouvelle demande</h1>
           </div>
+          <div className="flex space-x-2">
+            <span className={`h-2 w-8 rounded-full ${step >= 1 ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+            <span className={`h-2 w-8 rounded-full ${step >= 2 ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+          </div>
+        </div>
 
-          {/* Form */}
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center">
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          {/* STEP 1 : INFORMATIONS */}
+          {step === 1 && (
+            <form onSubmit={handleStep1Submit} className="p-6 space-y-6">
+              <div className="flex items-center border-b pb-4">
                 <FileText className="h-5 w-5 text-green-600 mr-2" />
-                <h2 className="text-lg font-medium text-gray-900">
-                  Informations de la demande
-                </h2>
+                <h2 className="text-lg font-medium">Étape 1 : Détails de la demande</h2>
               </div>
-            </div>
 
-            <form onSubmit={handleSubmit} className="px-6 py-6 space-y-6">
-              {error && (
-                <div className="flex items-center p-3 text-sm text-red-700 bg-red-100 rounded-lg">
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                  {error}
+              {error && <div className="p-3 text-sm text-red-700 bg-red-100 rounded-lg flex items-center"><AlertCircle className="h-4 w-4 mr-2"/> {error}</div>}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Type de document *</label>
+                <div className="space-y-3">
+                  {Object.entries(documentCategories).map(([category, types]) => (
+                    <div key={category} className="border border-gray-300 rounded-md">
+                      <button type="button" onClick={() => setOpenCategory(openCategory === category ? null : category)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                        <span className="font-medium text-gray-700">{category}</span>
+                        {openCategory === category ? <ChevronDown /> : <ChevronRight />}
+                      </button>
+                      {openCategory === category && (
+                        <div className="px-4 pb-4 pt-2 border-t bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {types.map(typeEnum => {
+                            const checked = formData.document_type.includes(typeEnum);
+
+                            return (
+                              <label key={typeEnum} className={`flex items-center p-3 border rounded-md cursor-pointer
+                                                                ${checked
+                                                                  ? 'border-green-500 bg-green-50'
+                                                                  : 'border-gray-300 hover:bg-white'
+                                                                }`}
+>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleDocumentType(typeEnum)} // Envoie la valeur technique (ex: 'releve_notes_l0')
+                                  className="h-4 w-4 text-green-600 rounded"
+                                />
+                                <span className="ml-3 text-sm">
+                                  {DocumentTypeLabels[typeEnum]} {/* Affiche le texte lisible (ex: 'Relevé de notes L0') */}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              )}
-
-              <div>
-                <label htmlFor="document_type" className="block text-sm font-medium text-gray-700 mb-2">
-                  Type de document *
-                </label>
-
- <div className="space-y-3">
-    {Object.entries(documentCategories).map(([category, types]) => {
-      const isOpen = openCategory === category;
-
-      return (
-        <div
-          key={category}
-          className="border border-gray-300 rounded-md"
-        >
-          {/* Header catégorie */}
-          <button
-            type="button"
-            onClick={() => toggleCategory(category)}
-            className="w-full flex items-center justify-between px-4 py-3
-                       text-left hover:bg-gray-50"
-          >
-            <span className="font-medium text-gray-700">
-              {category}
-            </span>
-
-            <span className="text-gray-500">
-              {isOpen ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-            </span>
-          </button>
-
-          {/* Contenu catégorie */}
-          {isOpen && (
-            <div className="px-4 pb-4 pt-2 border-t bg-gray-50">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {types.map(type => {
-                  const checked = formData.document_type.includes(type);
-
-                  return (
-                    <label
-                      key={type}
-                      className={`flex items-center p-3 border rounded-md cursor-pointer
-                        ${checked
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-gray-300 hover:bg-white'
-                        }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleDocumentType(type)}
-                        className="h-4 w-4 text-green-600 rounded"
-                      />
-                      <span className="ml-3 text-sm">
-                        {type}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    })}
-  </div>
-
-  {formData.document_type.length > 0 && (
-  <div className="mt-4">
-    <p className="text-sm font-medium text-gray-700 mb-2">
-      Documents sélectionnés :
-    </p>
-
-    <div className="flex flex-wrap gap-2">
-      {formData.document_type.map(type => (
-        <span
-          key={type}
-          className="inline-flex items-center px-3 py-1 rounded-full
-                     text-sm bg-green-100 text-green-800"
-        >
-          {type}
-          <button
-            type="button"
-            onClick={() => toggleDocumentType(type)}
-            className="ml-2 text-green-700 hover:text-green-900"
-          >
-            ✕
-          </button>
-        </span>
-      ))}
-    </div>
-  </div>
-)}
-
-
               </div>
 
               <div>
-                <label htmlFor="motif" className="block text-sm font-medium text-gray-700 mb-2">
-                  Motif de la demande *
-                </label>
-                <textarea
-                  id="motif"
-                  name="motif"
-                  required
-                  rows={4}
-                  value={formData.motif}
-                  onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-                  placeholder="Décrivez le motif de votre demande..."
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                  Expliquez pourquoi vous avez besoin de ce document (candidature, emploi, etc.)
-                </p>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Motif de la demande *</label>
+                <textarea name="motif" required rows={4} value={formData.motif} onChange={handleChange} className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500" />
               </div>
 
-<div className="mt-6">
-  <label className="block text-sm font-medium text-gray-700 mb-2">
-    Preuves de régularité
-  </label>
-
-  <input
-    type="file"
-    accept=".pdf,image/*"
-    multiple
-    onChange={handleFileChange}
-    className="block w-full text-sm text-gray-700
-               file:mr-4 file:py-2 file:px-4
-               file:rounded-md file:border-0
-               file:bg-green-50 file:text-green-700
-               hover:file:bg-green-100"
-  />
-
-  {evidences.length > 0 && (
-    <div className="mt-4 space-y-3">
-      {evidences.map((ev, index) => (
-        <div
-          key={index}
-          className="p-3 border rounded-md bg-gray-50 space-y-2"
-        >
-          <div className="flex justify-between items-center">
-            <span className="text-sm font-medium truncate">
-              {ev.file.name}
-            </span>
-
-            <button
-              type="button"
-              onClick={() => removeEvidence(index)}
-              className="text-red-600 text-sm"
-            >
-              Supprimer
-            </button>
-          </div>
-
-          <select
-            value={ev.type}
-            onChange={(e) => updateEvidenceType(index, e.target.value)}
-            className="w-full px-3 py-2 border rounded-md
-                       focus:ring-green-500 focus:border-green-500"
-          >
-            <option value="">Sélectionnez le type de preuve *</option>
-            {evidenceTypes.map(type => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </div>
-      ))}
-    </div>
-  )}
-</div>
-
-
-              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => navigate('/dashboard')}
-                  className="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Création...' : 'Soumettre la demande'}
+              <div className="flex justify-end">
+                <button type="submit" disabled={loading} className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
+                  {loading ? 'Enregistrement...' : 'Suivant : Ajouter les preuves'}
                 </button>
               </div>
             </form>
-          </div>
+          )}
+
+          {/* STEP 2 : PREUVES */}
+          {step === 2 && (
+            <div className="p-6 space-y-6">
+              <div className="flex items-center border-b pb-4 text-green-600">
+                <Upload className="h-5 w-5 mr-2" />
+                <h2 className="text-lg font-medium">Étape 2 : Pièces justificatives</h2>
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-md text-sm text-blue-800">
+                Votre demande a été enregistrée en brouillon. Vous pouvez ajouter les preuves maintenant.
+              </div>
+
+              <input type="file" multiple onChange={handleFileChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-green-50 file:text-green-700 hover:file:bg-green-100"/>
+
+              <div className="space-y-3">
+                {evidences.map((ev, index) => (
+                  <div key={index} className="p-3 border rounded-md bg-gray-50 flex flex-col space-y-2">
+                    <div className="flex justify-between font-medium text-sm">
+                      <span className="truncate">{ev.file.name}</span>
+                      <button onClick={() => setEvidences(evidences.filter((_, i) => i !== index))} className="text-red-600">Supprimer</button>
+                    </div>
+                    <select 
+                      value={ev.type} 
+                      onChange={(e) => {
+                        const newEv = [...evidences];
+                        newEv[index].type = e.target.value;
+                        setEvidences(newEv);
+                      }}
+                      className="w-full px-3 py-2 border rounded-md
+                       focus:ring-green-500 focus:border-green-500"
+                    >
+                      <option value="">Sélectionnez le type de preuve *</option>
+                      {evidenceTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between pt-6">
+                {/* <button onClick={() => navigate('/dashboard')} className="text-gray-600 hover:underline">
+                  Finaliser plus tard (Garder en brouillon)
+                </button> */}
+                <button 
+                  onClick={handleStep2Submit} 
+                  disabled={loading} 
+                  className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center"
+                >
+                  {loading ? 'Envoi...' : <><CheckCircle className="h-4 w-4 mr-2"/> Terminer la soumission</>}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
